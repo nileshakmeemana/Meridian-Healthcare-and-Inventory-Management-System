@@ -237,9 +237,13 @@ exports.getMyPrescriptions = async (req, res) => {
 
 // Delete patient (admin only)
 exports.deletePatient = async (req, res) => {
-  try {
     const patientId = req.params.id;
 
+    // Get the user_id associated with this patient
+  const patientId = req.params.id;
+  let conn;
+
+  try {
     // Get the user_id associated with this patient
     const patientResult = await db.query(
       "SELECT user_id FROM patients WHERE patient_id = :1",
@@ -254,32 +258,67 @@ exports.deletePatient = async (req, res) => {
 
     const userId = patientResult.rows[0].USER_ID;
 
-    // Delete in correct order due to foreign key constraints
-    // 1. Delete prescription items first
-    await db.query(
-      "DELETE FROM prescription_items WHERE prescription_id IN (SELECT prescription_id FROM prescriptions WHERE patient_id = :1)",
-      [patientId],
-    );
+    const { getConnection, queryNoCommit } = require("../config/database");
+      conn = await getConnection();
 
-    // 2. Delete prescriptions
-    await db.query("DELETE FROM prescriptions WHERE patient_id = :1", [
-      patientId,
-    ]);
+      // Delete in correct order due to foreign key constraints
+      // 1. Delete prescription items first
+      await queryNoCommit(
+        conn,
+        "DELETE FROM prescription_items WHERE prescription_id IN (SELECT prescription_id FROM prescriptions WHERE patient_id = :1)",
+        [patientId],
+      );
 
-    // 3. Delete appointments
-    await db.query("DELETE FROM appointments WHERE patient_id = :1", [
-      patientId,
-    ]);
+      // 2. Delete prescriptions
+      await queryNoCommit(
+        conn,
+        "DELETE FROM prescriptions WHERE patient_id = :1",
+        [patientId],
+      );
 
-    // 4. Delete the patient
-    await db.query("DELETE FROM patients WHERE patient_id = :1", [patientId]);
+      // 3. Delete sales records
+      await queryNoCommit(
+        conn,
+        "DELETE FROM sale_items WHERE sale_id IN (SELECT sale_id FROM sales WHERE patient_id = :1)",
+        [patientId],
+      );
 
-    // 5. Delete the associated user
-    await db.query("DELETE FROM users WHERE user_id = :1", [userId]);
+      await queryNoCommit(
+        conn,
+        "DELETE FROM sales WHERE patient_id = :1",
+        [patientId],
+      );
 
-    res.json({ success: true, message: "Patient deleted successfully" });
+      // 4. Delete appointments
+      await queryNoCommit(
+        conn,
+        "DELETE FROM appointments WHERE patient_id = :1",
+        [patientId],
+      );
+
+      // 5. Delete the patient
+      await queryNoCommit(
+        conn,
+        "DELETE FROM patients WHERE patient_id = :1",
+        [patientId],
+      );
+
+      // 6. Delete the associated user
+      await queryNoCommit(
+        conn,
+        "DELETE FROM users WHERE user_id = :1",
+        [userId],
+      );
+
+      await conn.commit();
+      await conn.close();
+
+      res.json({ success: true, message: "Patient deleted successfully" });
   } catch (err) {
-    console.error("Delete patient error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
+    if (conn) {
+      await conn.rollback().catch(() => {});
+      await conn.close().catch(() => {});
+    }
+    console.error("Delete patient error:", err.message);
+    res.status(500).json({ success: false, message: err.message });
 };
