@@ -239,52 +239,44 @@ exports.getMyPrescriptions = async (req, res) => {
 exports.deletePatient = async (req, res) => {
   try {
     const patientId = req.params.id;
-    
+
     // Get the user_id associated with this patient
     const patientResult = await db.query(
       "SELECT user_id FROM patients WHERE patient_id = :1",
       [patientId],
     );
-    
+
     if (!patientResult.rows[0]) {
       return res
         .status(404)
         .json({ success: false, message: "Patient not found" });
     }
-    
+
     const userId = patientResult.rows[0].USER_ID;
-    
+
     // Delete in correct order due to foreign key constraints
     // 1. Delete prescription items first
     await db.query(
       "DELETE FROM prescription_items WHERE prescription_id IN (SELECT prescription_id FROM prescriptions WHERE patient_id = :1)",
       [patientId],
     );
-    
+
     // 2. Delete prescriptions
-    await db.query(
-      "DELETE FROM prescriptions WHERE patient_id = :1",
-      [patientId],
-    );
-    
+    await db.query("DELETE FROM prescriptions WHERE patient_id = :1", [
+      patientId,
+    ]);
+
     // 3. Delete appointments
-    await db.query(
-      "DELETE FROM appointments WHERE patient_id = :1",
-      [patientId],
-    );
-    
+    await db.query("DELETE FROM appointments WHERE patient_id = :1", [
+      patientId,
+    ]);
+
     // 4. Delete the patient
-    await db.query(
-      "DELETE FROM patients WHERE patient_id = :1",
-      [patientId],
-    );
-    
+    await db.query("DELETE FROM patients WHERE patient_id = :1", [patientId]);
+
     // 5. Delete the associated user
-    await db.query(
-      "DELETE FROM users WHERE user_id = :1",
-      [userId],
-    );
-    
+    await db.query("DELETE FROM users WHERE user_id = :1", [userId]);
+
     res.json({ success: true, message: "Patient deleted successfully" });
   } catch (err) {
     console.error("Delete patient error:", err);
