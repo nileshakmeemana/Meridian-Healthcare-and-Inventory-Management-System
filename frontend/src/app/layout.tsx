@@ -6,7 +6,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Meridian — Healthcare & Inventory Management',
+  title: 'Meridian',
   description: 'Comprehensive healthcare and inventory management system',
   icons: {
     icon: '/favicon.ico',
