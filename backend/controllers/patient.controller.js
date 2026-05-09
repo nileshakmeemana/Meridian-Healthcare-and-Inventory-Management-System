@@ -254,13 +254,32 @@ exports.deletePatient = async (req, res) => {
     
     const userId = patientResult.rows[0].USER_ID;
     
-    // Delete the patient (cascade will handle related records)
+    // Delete in correct order due to foreign key constraints
+    // 1. Delete prescription items first
+    await db.query(
+      "DELETE FROM prescription_items WHERE prescription_id IN (SELECT prescription_id FROM prescriptions WHERE patient_id = :1)",
+      [patientId],
+    );
+    
+    // 2. Delete prescriptions
+    await db.query(
+      "DELETE FROM prescriptions WHERE patient_id = :1",
+      [patientId],
+    );
+    
+    // 3. Delete appointments
+    await db.query(
+      "DELETE FROM appointments WHERE patient_id = :1",
+      [patientId],
+    );
+    
+    // 4. Delete the patient
     await db.query(
       "DELETE FROM patients WHERE patient_id = :1",
       [patientId],
     );
     
-    // Delete the associated user
+    // 5. Delete the associated user
     await db.query(
       "DELETE FROM users WHERE user_id = :1",
       [userId],
@@ -268,6 +287,7 @@ exports.deletePatient = async (req, res) => {
     
     res.json({ success: true, message: "Patient deleted successfully" });
   } catch (err) {
+    console.error("Delete patient error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
