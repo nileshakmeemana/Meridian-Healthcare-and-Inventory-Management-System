@@ -358,7 +358,7 @@ router.delete("/doctors/:id", async (req, res) => {
   try {
     const { getConnection, queryNoCommit } = require("../config/database");
     let conn;
-    
+
     try {
       const doctorRes = await query(
         `SELECT user_id FROM doctors WHERE doctor_id = :1`,
@@ -369,9 +369,9 @@ router.delete("/doctors/:id", async (req, res) => {
           .status(404)
           .json({ success: false, message: "Doctor not found" });
       const user_id = doctorRes.rows[0].USER_ID;
-      
+
       conn = await getConnection();
-      
+
       // Delete in correct order due to foreign key constraints
       // 1. Delete prescription items first
       await queryNoCommit(
@@ -379,34 +379,34 @@ router.delete("/doctors/:id", async (req, res) => {
         `DELETE FROM prescription_items WHERE prescription_id IN (SELECT prescription_id FROM prescriptions WHERE doctor_id = :1)`,
         [req.params.id],
       );
-      
+
       // 2. Delete prescriptions
       await queryNoCommit(
         conn,
         `DELETE FROM prescriptions WHERE doctor_id = :1`,
         [req.params.id],
       );
-      
+
       // 3. Delete appointments
       await queryNoCommit(
         conn,
         `DELETE FROM appointments WHERE doctor_id = :1`,
         [req.params.id],
       );
-      
+
       // 4. Delete the doctor record
-      await queryNoCommit(
-        conn,
-        `DELETE FROM doctors WHERE doctor_id = :1`,
-        [req.params.id],
-      );
-      
+      await queryNoCommit(conn, `DELETE FROM doctors WHERE doctor_id = :1`, [
+        req.params.id,
+      ]);
+
       // 5. Delete the associated user
-      await queryNoCommit(conn, `DELETE FROM users WHERE user_id = :1`, [user_id]);
-      
+      await queryNoCommit(conn, `DELETE FROM users WHERE user_id = :1`, [
+        user_id,
+      ]);
+
       await conn.commit();
       await conn.close();
-      
+
       res.json({ success: true, message: "Doctor deleted" });
     } catch (err) {
       if (conn) {
@@ -717,7 +717,7 @@ router.delete("/pharmacists/:id", async (req, res) => {
   try {
     const { getConnection, queryNoCommit } = require("../config/database");
     let conn;
-    
+
     try {
       const pharmRes = await query(
         `SELECT user_id FROM pharmacists WHERE pharmacist_id = :1`,
@@ -728,9 +728,9 @@ router.delete("/pharmacists/:id", async (req, res) => {
           .status(404)
           .json({ success: false, message: "Pharmacist not found" });
       const user_id = pharmRes.rows[0].USER_ID;
-      
+
       conn = await getConnection();
-      
+
       // Delete in correct order due to foreign key constraints
       // 1. Delete sale items first
       await queryNoCommit(
@@ -738,27 +738,27 @@ router.delete("/pharmacists/:id", async (req, res) => {
         `DELETE FROM sale_items WHERE sale_id IN (SELECT sale_id FROM sales WHERE pharmacist_id = :1)`,
         [req.params.id],
       );
-      
+
       // 2. Delete sales records
-      await queryNoCommit(
-        conn,
-        `DELETE FROM sales WHERE pharmacist_id = :1`,
-        [req.params.id],
-      );
-      
+      await queryNoCommit(conn, `DELETE FROM sales WHERE pharmacist_id = :1`, [
+        req.params.id,
+      ]);
+
       // 3. Delete the pharmacist record
       await queryNoCommit(
         conn,
         `DELETE FROM pharmacists WHERE pharmacist_id = :1`,
         [req.params.id],
       );
-      
+
       // 4. Delete the associated user
-      await queryNoCommit(conn, `DELETE FROM users WHERE user_id = :1`, [user_id]);
-      
+      await queryNoCommit(conn, `DELETE FROM users WHERE user_id = :1`, [
+        user_id,
+      ]);
+
       await conn.commit();
       await conn.close();
-      
+
       res.json({ success: true, message: "Pharmacist deleted" });
     } catch (err) {
       if (conn) {

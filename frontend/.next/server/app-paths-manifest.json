@@ -1,11 +1,8 @@
 {
   "/login/page": "app/login/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/patients/page": "app/dashboard/patients/page.js",
-  "/dashboard/doctors/page": "app/dashboard/doctors/page.js",
-  "/dashboard/pharmacists/page": "app/dashboard/pharmacists/page.js",
   "/dashboard/appointments/page": "app/dashboard/appointments/page.js",
-  "/dashboard/medicines/page": "app/dashboard/medicines/page.js",
+  "/dashboard/patients/page": "app/dashboard/patients/page.js",
   "/dashboard/supplier/page": "app/dashboard/supplier/page.js",
-  "/dashboard/prescriptions/page": "app/dashboard/prescriptions/page.js"
+  "/dashboard/medicines/page": "app/dashboard/medicines/page.js"
 }

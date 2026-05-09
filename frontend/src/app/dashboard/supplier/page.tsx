@@ -329,7 +329,7 @@ export default function SupplierPage() {
               className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
             >
               <Package className="w-4 h-4" />
-              Record Order
+              Requets Order
             </button>
             <button
               onClick={openCreate}
@@ -751,7 +751,7 @@ export default function SupplierPage() {
                   disabled={savingOrder}
                   className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  {savingOrder ? 'Recording...' : 'Record Order'}
+                  {savingOrder ? 'Recording...' : 'Requets Order'}
                 </button>
               </div>
             </motion.div>
