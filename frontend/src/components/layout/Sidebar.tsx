@@ -59,7 +59,7 @@ export default function Sidebar() {
     <motion.aside
       animate={{ width: collapsed ? 72 : 260 }}
       transition={{ duration: 0.25, ease: 'easeInOut' }}
-      className="meridian-sidebar relative flex flex-col h-screen flex-shrink-0 overflow-hidden"
+      className="meridian-sidebar relative flex flex-col h-screen flex-shrink-0 overflow-visible"
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
