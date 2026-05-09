@@ -9,5 +9,6 @@ router.get('/prescriptions', authenticate, authorize('patient'), ctrl.getMyPresc
 router.put('/me', authenticate, authorize('patient'), ctrl.updateProfile);
 router.get('/:id', authenticate, ctrl.getPatientById);
 router.get('/:id/history', authenticate, ctrl.getMedicalHistory);
+router.delete('/:id', authenticate, authorize('admin'), ctrl.deletePatient);
 
 module.exports = router;

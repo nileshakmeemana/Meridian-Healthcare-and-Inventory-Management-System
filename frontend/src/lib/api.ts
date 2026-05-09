@@ -94,6 +94,7 @@ export const adminAPI = {
   // Patients (admin)
   getPatients:      (params?: any) => api.get('/admin/patients', { params }),
   createPatient:    (data: any) => api.post('/admin/patients', data),
+  deletePatient:    (id: number) => api.delete(`/patients/${id}`),
 };
 
 // ── Patients ──────────────────────────────────────────────────────────────────
@@ -104,6 +105,7 @@ export const patientAPI = {
   updateMe:        (data: any) => api.put('/patients/me', data),
   getMedicalHistory: (id: number) => api.get(`/patients/${id}/history`),
   getMyPrescriptions: () => api.get('/patients/prescriptions'),
+  delete:          (id: number) => api.delete(`/patients/${id}`),
 };
 
 // ── Doctors ───────────────────────────────────────────────────────────────────

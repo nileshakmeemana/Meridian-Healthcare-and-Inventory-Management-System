@@ -234,3 +234,40 @@ exports.getMyPrescriptions = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+// Delete patient (admin only)
+exports.deletePatient = async (req, res) => {
+  try {
+    const patientId = req.params.id;
+    
+    // Get the user_id associated with this patient
+    const patientResult = await db.query(
+      "SELECT user_id FROM patients WHERE patient_id = :1",
+      [patientId],
+    );
+    
+    if (!patientResult.rows[0]) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Patient not found" });
+    }
+    
+    const userId = patientResult.rows[0].USER_ID;
+    
+    // Delete the patient (cascade will handle related records)
+    await db.query(
+      "DELETE FROM patients WHERE patient_id = :1",
+      [patientId],
+    );
+    
+    // Delete the associated user
+    await db.query(
+      "DELETE FROM users WHERE user_id = :1",
+      [userId],
+    );
+    
+    res.json({ success: true, message: "Patient deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

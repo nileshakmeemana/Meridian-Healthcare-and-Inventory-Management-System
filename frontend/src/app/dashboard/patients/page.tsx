@@ -23,6 +23,8 @@ export default function PatientsPage() {
   const [genderFilter, setGenderFilter] = useState('All')
   const [showAdd, setShowAdd] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [form, setForm] = useState({ first_name: '', last_name: '', email: '', password: '', date_of_birth: '', gender: 'Male', blood_group: '', phone: '', address: '', emergency_contact: '', emergency_phone: '' })
 
   const getValue = (row: any, upper: string, lower: string) => row?.[upper] ?? row?.[lower]
@@ -117,6 +119,21 @@ export default function PatientsPage() {
       // TODO: show error
     } finally {
       setCreating(false)
+    }
+  }
+
+  const deletePatient = async () => {
+    if (!selected?.PATIENT_ID) return
+    setDeleting(true)
+    try {
+      await adminAPI.deletePatient(selected.PATIENT_ID)
+      setPatients(prev => prev.filter(p => p.PATIENT_ID !== selected.PATIENT_ID))
+      setSelected(null)
+      setShowDeleteConfirm(false)
+    } catch (err) {
+      // TODO: show error
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -221,7 +238,30 @@ export default function PatientsPage() {
               ].map(item => (
                 <div key={item.label} className="flex justify-between py-2 border-b border-gray-50"><span className="text-sm text-gray-500">{item.label}</span><span className="text-sm font-medium text-gray-800">{item.value}</span></div>
               ))}</div>
-              <button onClick={() => setSelected(null)} className="mt-6 w-full py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors">Close</button>
+              <div className="flex gap-2 mt-6">
+                <button onClick={() => setSelected(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors">Close</button>
+                {user?.role === 'admin' && (
+                  <button onClick={() => setShowDeleteConfirm(true)} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors">Delete</button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showDeleteConfirm && selected && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(false)}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} onClick={e => e.stopPropagation()} className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+                  <span className="text-3xl">⚠️</span>
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Delete Patient?</h2>
+                <p className="text-sm text-gray-500 mt-2">Are you sure you want to delete <strong>{selected.FULL_NAME}</strong>? This action cannot be undone.</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors">Cancel</button>
+                <button onClick={deletePatient} disabled={deleting} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50">{deleting ? 'Deleting...' : 'Delete'}</button>
+              </div>
             </motion.div>
           </motion.div>
         )}
