@@ -32,6 +32,22 @@ router.post(
   ctrl.createSupplyOrder,
 );
 
+// Supply orders list for admin dashboards and supplier views
+router.get(
+  "/supply-orders",
+  authenticate,
+  authorize("admin", "pharmacist", "supplier"),
+  ctrl.getSupplyOrders,
+);
+
+// Update supply order status (supplier profile only)
+router.patch(
+  "/supply-orders/:supply_id/status",
+  authenticate,
+  authorize("supplier"),
+  ctrl.updateSupplyOrderStatus,
+);
+
 // Supply history: allow supplier, pharmacist and admin to view supplier order history
 router.get(
   "/supply-history",

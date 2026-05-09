@@ -14,7 +14,13 @@ exports.getAllSuppliers = async (req, res) => {
              s.phone,
              s.address,
              s.rating,
-             (SELECT COUNT(*) FROM supply_orders so WHERE so.supplier_id = s.supplier_id) AS total_orders
+             (SELECT COUNT(*) FROM supply_orders so WHERE so.supplier_id = s.supplier_id) AS total_orders,
+             (SELECT COUNT(*) FROM supply_orders so WHERE so.supplier_id = s.supplier_id AND so.status IN ('Pending', 'Shipped')) AS active_orders,
+             CASE
+               WHEN (SELECT COUNT(*) FROM supply_orders so WHERE so.supplier_id = s.supplier_id AND so.status IN ('Pending', 'Shipped')) > 0
+                 THEN 'Active'
+               ELSE 'Completed'
+             END AS active_order_status
       FROM users u JOIN suppliers s ON u.user_id = s.user_id
       ORDER BY s.company_name
     `);
@@ -120,7 +126,7 @@ exports.createSupplyOrder = async (req, res) => {
     await db.query(
       `
       INSERT INTO supply_orders (request_id, supplier_id, medicine_id, quantity, unit_cost, total_cost, batch_number, expiry_date, supplied_date, status, notes)
-      VALUES (:1, :2, :3, :4, :5, :6, :7, TO_DATE(:8, 'YYYY-MM-DD'), SYSDATE, 'Delivered', :9)
+      VALUES (:1, :2, :3, :4, :5, :6, :7, TO_DATE(:8, 'YYYY-MM-DD'), SYSDATE, 'Pending', :9)
     `,
       [
         request_id || null,
@@ -135,40 +141,16 @@ exports.createSupplyOrder = async (req, res) => {
       ],
     );
 
-    // Update medicine stock
-    await db.query(
-      `UPDATE medicines SET stock_quantity = stock_quantity + :1, updated_at = CURRENT_TIMESTAMP WHERE medicine_id = :2`,
-      [resolvedQuantity, resolvedMedicineId],
-    );
-
-    // After updating stock, trigger low-stock notifications if needed
-    try {
-      const medRes = await db.query(
-        `SELECT medicine_id FROM medicines WHERE medicine_id = :1`,
-        [resolvedMedicineId],
-      );
-      if (medRes.rows[0]) {
-        const medId = medRes.rows[0].MEDICINE_ID;
-        // Reuse medicine controller helper by requiring it
-        const medCtrl = require("./medicine.controller");
-        if (typeof medCtrl.notifyLowStockIfNeeded === "function") {
-          await medCtrl.notifyLowStockIfNeeded(medId);
-        }
-      }
-    } catch (e) {
-      console.error("notifyLowStockIfNeeded (supplier) error:", e.message || e);
-    }
-
     if (request_id) {
       await db.query(
         "UPDATE medicine_requests SET status = :1 WHERE request_id = :2",
-        ["Fulfilled", request_id],
+        ["Approved", request_id],
       );
     }
 
     res.json({
       success: true,
-      message: "Supply order created and stock updated",
+      message: "Supply order created with pending status",
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -199,6 +181,145 @@ exports.getSupplyHistory = async (req, res) => {
     res.json({ success: true, data: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Get supply orders for admin / pharmacist / supplier views
+exports.getSupplyOrders = async (req, res) => {
+  try {
+    const supplierIdParam = req.query.supplier_id;
+    let supplierId = supplierIdParam || null;
+
+    if (req.user.role === "supplier" && !supplierId) {
+      const supplierResult = await db.query(
+        "SELECT supplier_id FROM suppliers WHERE user_id = :1",
+        [req.user.userId],
+      );
+      supplierId = supplierResult.rows[0]?.SUPPLIER_ID || null;
+    }
+
+    const binds = [];
+    let whereClause = "";
+    if (supplierId) {
+      whereClause = "WHERE so.supplier_id = :1";
+      binds.push(supplierId);
+    }
+
+    const result = await db.query(
+      `
+      SELECT so.supply_id,
+             so.request_id,
+             so.supplier_id,
+             s.company_name AS supplier_name,
+             so.medicine_id,
+             m.name AS medicine_name,
+             m.category,
+             so.quantity,
+             so.unit_cost,
+             so.total_cost,
+             so.batch_number,
+             so.expiry_date,
+             so.supplied_date,
+             so.status,
+             so.notes,
+             so.created_at
+      FROM supply_orders so
+      JOIN suppliers s ON so.supplier_id = s.supplier_id
+      JOIN medicines m ON so.medicine_id = m.medicine_id
+      ${whereClause}
+      ORDER BY so.supplied_date DESC, so.created_at DESC
+    `,
+      binds,
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Update supply order status
+exports.updateSupplyOrderStatus = async (req, res) => {
+  const { supply_id } = req.params;
+  const { status } = req.body;
+
+  try {
+    if (!supply_id || !status) {
+      return res.status(400).json({
+        success: false,
+        message: "supply_id and status are required",
+      });
+    }
+
+    const validStatuses = ["Pending", "Shipped", "Delivered", "Cancelled"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+      });
+    }
+
+    // Get current supply order details
+    const orderRes = await db.query(
+      `SELECT so.status, so.quantity, so.medicine_id, so.supplier_id
+       FROM supply_orders so
+       WHERE so.supply_id = :1`,
+      [supply_id],
+    );
+
+    if (!orderRes.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Supply order not found",
+      });
+    }
+
+    const oldStatus = orderRes.rows[0].STATUS;
+    const quantity = orderRes.rows[0].QUANTITY;
+    const medicineId = orderRes.rows[0].MEDICINE_ID;
+    const orderSupplierId = orderRes.rows[0].SUPPLIER_ID;
+
+    const supplierResult = await db.query(
+      "SELECT supplier_id FROM suppliers WHERE user_id = :1",
+      [req.user.userId],
+    );
+    const currentSupplierId = supplierResult.rows[0]?.SUPPLIER_ID;
+
+    if (
+      !currentSupplierId ||
+      Number(currentSupplierId) !== Number(orderSupplierId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You can only update supply orders from your own supplier profile",
+      });
+    }
+
+    // Update the status
+    await db.query(
+      `UPDATE supply_orders SET status = :1 WHERE supply_id = :2`,
+      [status, supply_id],
+    );
+
+    // If transitioning to Delivered and wasn't Delivered before, update stock
+    if (status === "Delivered" && oldStatus !== "Delivered") {
+      await db.query(
+        `UPDATE medicines SET stock_quantity = stock_quantity + :1, updated_at = CURRENT_TIMESTAMP WHERE medicine_id = :2`,
+        [quantity, medicineId],
+      );
+    }
+
+    res.json({
+      success: true,
+      message: `Supply order status updated to ${status}${
+        status === "Delivered" && oldStatus !== "Delivered"
+          ? ` and stock updated by +${quantity}`
+          : ""
+      }`,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -329,22 +450,6 @@ exports.deleteSupplier = async (req, res) => {
 
     conn = await getConnection();
 
-    // Check for existing supply orders to avoid FK constraint issues
-    const ordersRes = await queryNoCommit(
-      conn,
-      `SELECT COUNT(*) AS CNT FROM supply_orders WHERE supplier_id = :1`,
-      [id],
-    );
-    const cnt = ordersRes.rows[0]?.CNT || 0;
-    if (cnt > 0) {
-      await conn.rollback().catch(() => {});
-      await conn.close().catch(() => {});
-      return res.status(400).json({
-        success: false,
-        message: "Cannot delete supplier with existing supply orders",
-      });
-    }
-
     // Get associated user_id
     const supRes = await queryNoCommit(
       conn,
@@ -352,6 +457,13 @@ exports.deleteSupplier = async (req, res) => {
       [id],
     );
     const userId = supRes.rows[0]?.USER_ID;
+
+    // Remove dependent supply orders first so delivered history does not block deletion
+    await queryNoCommit(
+      conn,
+      `DELETE FROM supply_orders WHERE supplier_id = :1`,
+      [id],
+    );
 
     // Delete supplier record
     await queryNoCommit(conn, `DELETE FROM suppliers WHERE supplier_id = :1`, [
@@ -368,7 +480,10 @@ exports.deleteSupplier = async (req, res) => {
     await conn.commit();
     await conn.close();
 
-    res.json({ success: true, message: "Supplier deleted" });
+    res.json({
+      success: true,
+      message: "Supplier and related supply orders deleted",
+    });
   } catch (err) {
     if (conn) {
       await conn.rollback().catch(() => {});

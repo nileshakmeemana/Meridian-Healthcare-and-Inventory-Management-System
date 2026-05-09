@@ -6,18 +6,35 @@ import { supplierAPI, medicineAPI } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth.store'
 
+const orderStatusStyles: Record<string, string> = {
+  Pending: 'bg-amber-100 text-amber-700',
+  Shipped: 'bg-sky-100 text-sky-700',
+  Delivered: 'bg-emerald-100 text-emerald-700',
+  Cancelled: 'bg-rose-100 text-rose-700',
+}
+
+const orderActivityStyles: Record<string, string> = {
+  Active: 'bg-amber-100 text-amber-700',
+  Completed: 'bg-slate-100 text-slate-600',
+}
+
 export default function SupplierPage() {
   const { user } = useAuthStore()
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [medicines, setMedicines] = useState<any[]>([])
+  const [orders, setOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [editingSupplier, setEditingSupplier] = useState<any>(null)
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(
+    user?.role === 'supplier' && user?.profileId ? Number(user.profileId) : null
+  )
   const [saving, setSaving] = useState(false)
   const [savingOrder, setSavingOrder] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [orderError, setOrderError] = useState('')
   const isSupplier = user?.role === 'supplier'
@@ -41,9 +58,10 @@ export default function SupplierPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const [supplierRes, medicineRes] = await Promise.all([
+      const [supplierRes, medicineRes, orderRes] = await Promise.all([
         supplierAPI.getAll(),
         medicineAPI.getAll(),
+        supplierAPI.getOrders(),
       ])
       
       console.log('Medicine Response:', medicineRes)
@@ -56,6 +74,8 @@ export default function SupplierPage() {
         ADDRESS: row.ADDRESS ?? row.address,
         RATING: row.RATING ?? row.rating,
         TOTAL_ORDERS: row.TOTAL_ORDERS ?? row.total_orders,
+        ACTIVE_ORDERS: row.ACTIVE_ORDERS ?? row.active_orders ?? 0,
+        ACTIVE_ORDER_STATUS: row.ACTIVE_ORDER_STATUS ?? row.active_order_status ?? 'Completed',
         EMAIL: row.EMAIL ?? row.email,
         IS_ACTIVE: row.IS_ACTIVE ?? row.is_active,
       }))
@@ -70,15 +90,39 @@ export default function SupplierPage() {
         STOCK_QUANTITY: row.STOCK_QUANTITY ?? row.stock_quantity,
         UNIT_PRICE: row.UNIT_PRICE ?? row.unit_price,
       }))
+
+      const ordersMapped = (orderRes.data?.data || []).map((row: any) => ({
+        SUPPLY_ID: row.SUPPLY_ID ?? row.supply_id,
+        REQUEST_ID: row.REQUEST_ID ?? row.request_id,
+        SUPPLIER_ID: row.SUPPLIER_ID ?? row.supplier_id,
+        SUPPLIER_NAME: row.SUPPLIER_NAME ?? row.supplier_name,
+        MEDICINE_ID: row.MEDICINE_ID ?? row.medicine_id,
+        MEDICINE_NAME: row.MEDICINE_NAME ?? row.medicine_name,
+        CATEGORY: row.CATEGORY ?? row.category,
+        QUANTITY: row.QUANTITY ?? row.quantity,
+        UNIT_COST: row.UNIT_COST ?? row.unit_cost,
+        TOTAL_COST: row.TOTAL_COST ?? row.total_cost,
+        BATCH_NUMBER: row.BATCH_NUMBER ?? row.batch_number,
+        EXPIRY_DATE: row.EXPIRY_DATE ?? row.expiry_date,
+        SUPPLIED_DATE: row.SUPPLIED_DATE ?? row.supplied_date,
+        STATUS: row.STATUS ?? row.status,
+        NOTES: row.NOTES ?? row.notes,
+      }))
       
       console.log('Medicines Mapped:', medicinesMapped)
       
       setSuppliers(visibleSuppliers)
       setMedicines(medicinesMapped)
+      setOrders(ordersMapped)
+
+      if (isSupplier && user?.profileId) {
+        setSelectedSupplierId(Number(user.profileId))
+      }
     } catch (err: any) {
       console.error('Error loading data:', err)
       setSuppliers([])
       setMedicines([])
+      setOrders([])
     } finally {
       setLoading(false)
     }
@@ -233,11 +277,30 @@ export default function SupplierPage() {
     }
   }
 
+  const handleUpdateOrderStatus = async (supplyId: number, newStatus: string) => {
+    setUpdatingOrderId(supplyId)
+    try {
+      const response = await supplierAPI.updateOrderStatus(supplyId, newStatus)
+      setOrderError('')
+      // Reload orders to reflect the change
+      await load()
+    } catch (err: any) {
+      setOrderError(err?.response?.data?.message || err?.message || 'Failed to update order status')
+    } finally {
+      setUpdatingOrderId(null)
+    }
+  }
+
   const filtered = suppliers.filter(s =>
     !search || s.FULL_NAME?.toLowerCase().includes(search.toLowerCase()) ||
     s.EMAIL?.toLowerCase().includes(search.toLowerCase()) ||
     s.PHONE?.toLowerCase().includes(search.toLowerCase())
   )
+
+  const selectedSupplier = suppliers.find(s => Number(s.SUPPLIER_ID) === Number(selectedSupplierId)) || null
+  const selectedSupplierOrders = selectedSupplierId
+    ? orders.filter(order => Number(order.SUPPLIER_ID) === Number(selectedSupplierId))
+    : []
 
   const stats = [
     { label: 'Total Suppliers', value: suppliers.length, color: 'bg-indigo-50 text-indigo-700', icon: Truck },
@@ -326,7 +389,13 @@ export default function SupplierPage() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.04 }}
-              className="bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md transition-shadow"
+              onClick={() => setSelectedSupplierId(Number(supplier.SUPPLIER_ID))}
+              className={cn(
+                'bg-white rounded-2xl border p-5 transition-shadow cursor-pointer hover:shadow-md',
+                Number(selectedSupplierId) === Number(supplier.SUPPLIER_ID)
+                  ? 'border-teal-300 shadow-sm ring-2 ring-teal-100'
+                  : 'border-gray-100'
+              )}
             >
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
@@ -344,19 +413,31 @@ export default function SupplierPage() {
                 <p><span className="text-gray-400">Address:</span> {supplier.ADDRESS || '—'}</p>
                 {supplier.RATING !== null && <p><span className="text-gray-400">Rating:</span> {supplier.RATING ?? '—'}</p>}
                 {supplier.TOTAL_ORDERS !== null && <p><span className="text-gray-400">Total Orders:</span> {supplier.TOTAL_ORDERS ?? 0}</p>}
+                <p><span className="text-gray-400">Active Orders:</span> {supplier.ACTIVE_ORDERS ?? 0}</p>
+                <div className="pt-1">
+                  <span className={cn('inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium', orderActivityStyles[supplier.ACTIVE_ORDER_STATUS] || 'bg-slate-100 text-slate-600')}>
+                    {supplier.ACTIVE_ORDER_STATUS || 'Completed'}
+                  </span>
+                </div>
               </div>
 
               {!isSupplier && (
                 <div className="flex gap-2 pt-3 border-t border-gray-100">
                   <button
-                    onClick={() => openEdit(supplier)}
+                    onClick={e => {
+                      e.stopPropagation()
+                      openEdit(supplier)
+                    }}
                     className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-blue-50 text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
                   >
                     <Edit2 className="w-4 h-4" />
                     Edit
                   </button>
                   <button
-                    onClick={() => deleteSupplier(supplier)}
+                    onClick={e => {
+                      e.stopPropagation()
+                      deleteSupplier(supplier)
+                    }}
                     disabled={deletingId === (supplier.SUPPLIER_ID ?? supplier.supplier_id)}
                     className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg hover:bg-red-50 text-red-600 hover:text-red-700 text-sm font-medium transition-colors disabled:opacity-50"
                   >
@@ -367,6 +448,101 @@ export default function SupplierPage() {
               )}
             </motion.div>
           ))
+        )}
+      </div>
+
+      {/* Supply Orders */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-5 md:p-6 space-y-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Supply Orders</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {isSupplier
+                ? 'Orders linked to your supplier profile and their current status'
+                : selectedSupplier
+                  ? `Orders for ${selectedSupplier.FULL_NAME}`
+                  : 'Select a supplier card above to view their order status'}
+            </p>
+          </div>
+          {!isSupplier && selectedSupplier && (
+            <button
+              onClick={() => setSelectedSupplierId(null)}
+              className="text-sm font-medium text-teal-700 hover:text-teal-800"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
+
+        {orderError && (
+          <div className="rounded-lg bg-red-50 px-4 py-3 border border-red-200">
+            <p className="text-sm text-red-700">{orderError}</p>
+          </div>
+        )}
+
+        {!selectedSupplierId ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+            Choose a supplier above to load supply orders and status.
+          </div>
+        ) : selectedSupplierOrders.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+            No supply orders found for this supplier.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-gray-100">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="bg-gray-50 text-gray-500 uppercase text-xs tracking-wide">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium">Medicine</th>
+                    <th className="text-left px-4 py-3 font-medium">Quantity</th>
+                    <th className="text-left px-4 py-3 font-medium">Unit Cost</th>
+                    <th className="text-left px-4 py-3 font-medium">Order Date</th>
+                    <th className="text-left px-4 py-3 font-medium">Status</th>
+                    {isSupplier && <th className="text-left px-4 py-3 font-medium">Action</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {selectedSupplierOrders.map(order => (
+                    <tr key={order.SUPPLY_ID} className="hover:bg-gray-50/70 transition-colors">
+                      <td className="px-4 py-4">
+                        <div className="font-medium text-gray-900">{order.MEDICINE_NAME || 'Medicine'}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {order.SUPPLIER_NAME || selectedSupplier?.FULL_NAME || 'Supplier'}
+                          {order.BATCH_NUMBER ? ` · Batch ${order.BATCH_NUMBER}` : ''}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-gray-700">{order.QUANTITY || 0}</td>
+                      <td className="px-4 py-4 text-gray-700">${Number(order.UNIT_COST || 0).toFixed(2)}</td>
+                      <td className="px-4 py-4 text-gray-700">
+                        {order.SUPPLIED_DATE ? new Date(order.SUPPLIED_DATE).toLocaleDateString() : '—'}
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={cn('inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium', orderStatusStyles[order.STATUS] || 'bg-gray-100 text-gray-600')}>
+                          {order.STATUS || 'Pending'}
+                        </span>
+                      </td>
+                      {isSupplier && (
+                        <td className="px-4 py-4">
+                          <select
+                            value={order.STATUS || 'Pending'}
+                            onChange={(e) => handleUpdateOrderStatus(order.SUPPLY_ID, e.target.value)}
+                            disabled={updatingOrderId === order.SUPPLY_ID}
+                            className="px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-gray-700"
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Shipped">Shipped</option>
+                            <option value="Delivered">Delivered</option>
+                            <option value="Cancelled">Cancelled</option>
+                          </select>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
 

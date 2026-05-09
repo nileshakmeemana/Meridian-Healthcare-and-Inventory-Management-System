@@ -1,4 +1,4 @@
-// File: C:\Users\User\Desktop\meridian\frontend\src\app\dashboard\supplier\page.tsx
+// File: C:\Users\User\Desktop\Meridian\frontend\src\app\dashboard\supplier\page.tsx
 import * as entry from '../../../../../src/app/dashboard/supplier/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

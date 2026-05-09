@@ -487,6 +487,38 @@ router.post("/pharmacists", async (req, res) => {
   }
 });
 
+// ── PATIENTS ─────────────────────────────────────────────────────────────────
+// GET all patients
+router.get("/patients", async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT pt.patient_id,
+              pt.user_id,
+              pt.first_name,
+              pt.last_name,
+              pt.date_of_birth,
+              pt.gender,
+              pt.blood_group,
+              pt.phone,
+              pt.address,
+              pt.emergency_contact,
+              pt.emergency_phone,
+              u.username,
+              u.email,
+              u.is_active,
+              u.created_at,
+              fn_get_patient_age(pt.patient_id) AS age,
+              (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = pt.patient_id) AS total_appointments
+       FROM patients pt
+       JOIN users u ON u.user_id = pt.user_id
+       ORDER BY pt.created_at DESC`,
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // POST create patient (creates user + patient record)
 router.post("/patients", async (req, res) => {
   const bcrypt = require("bcryptjs");
@@ -574,12 +606,10 @@ router.post("/patients", async (req, res) => {
     res.status(201).json({ success: true, data: newRes.rows[0] });
   } catch (err) {
     if (err?.errorNum === 1 || err?.code === "ORA-00001") {
-      return res
-        .status(409)
-        .json({
-          success: false,
-          message: "A record with this value already exists",
-        });
+      return res.status(409).json({
+        success: false,
+        message: "A record with this value already exists",
+      });
     }
     res.status(500).json({ success: false, message: err.message });
   }

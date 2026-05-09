@@ -30,9 +30,11 @@ export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
 }
 
-export function getInitials(name: string): string {
-  return name
+export function getInitials(name?: string | null): string {
+  return String(name || '')
+    .trim()
     .split(' ')
+    .filter(Boolean)
     .map((n) => n[0])
     .join('')
     .toUpperCase()

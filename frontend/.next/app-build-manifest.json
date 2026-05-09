@@ -31,15 +31,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/supplier/page.js"
     ],
-    "/dashboard/appointments/page": [
+    "/dashboard/patients/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/appointments/page.js"
-    ],
-    "/dashboard/prescriptions/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/prescriptions/page.js"
+      "static/chunks/app/dashboard/patients/page.js"
     ]
   }
 }

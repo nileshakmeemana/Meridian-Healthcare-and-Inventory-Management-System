@@ -130,6 +130,7 @@ export default function LoginPage() {
                 { role: 'Doctor',     email: 'silva@meridian.health' },
                 { role: 'Pharmacist', email: 'nimal@meridian.health' },
                 { role: 'Patient',    email: 'kasun@email.com' },
+                { role: 'Supplier',   email: 'mediline@supplier.com' },
               ].map((cred) => (
                 <button
                   key={cred.role}

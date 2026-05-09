@@ -1,14 +1,18 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Search, Edit2, ToggleLeft, ToggleRight, X, Stethoscope, Mail, Lock, Phone } from 'lucide-react'
-import { adminAPI } from '@/lib/api'
+import { Plus, Search, Edit2, ToggleLeft, ToggleRight, X, Phone } from 'lucide-react'
+import { adminAPI, doctorAPI, appointmentAPI } from '@/lib/api'
 import { cn, getInitials } from '@/lib/utils'
+import { useAuthStore } from '@/store/auth.store'
 
 const SPECIALIZATIONS = ['Cardiology', 'General Medicine', 'Pediatrics', 'Orthopedics', 'Neurology', 'Dermatology', 'Psychiatry', 'Ophthalmology']
 
 export default function DoctorsPage() {
+  const { user } = useAuthStore()
   const [doctors, setDoctors] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editDoctor, setEditDoctor] = useState<any>(null)
@@ -25,16 +29,86 @@ export default function DoctorsPage() {
   })
   const [saving, setSaving] = useState(false)
 
+  const getValue = (row: any, upper: string, lower: string) => row?.[upper] ?? row?.[lower]
+
   useEffect(() => {
     loadDoctors()
-  }, [])
+  }, [user?.role])
 
   const loadDoctors = async () => {
+    setLoading(true)
+    setLoadError('')
     try {
-      const r = await adminAPI.getDoctors()
-      setDoctors(r.data?.data || [])
+      const response = await adminAPI.getDoctors({ _t: Date.now() }).catch(() => doctorAPI.getAll({ _t: Date.now() }))
+      const doctorRows = response.data?.data || response.data?.rows || (Array.isArray(response.data) ? response.data : [])
+      let normalized = doctorRows.map((d: any) => {
+        const firstName = getValue(d, 'FIRST_NAME', 'first_name')
+        const lastName = getValue(d, 'LAST_NAME', 'last_name')
+        const fullNameValue = getValue(d, 'FULL_NAME', 'full_name')
+        if (firstName || lastName) {
+          return {
+            ...d,
+            FIRST_NAME: firstName || '',
+            LAST_NAME: lastName || '',
+            EMAIL: getValue(d, 'EMAIL', 'email') || '',
+            PHONE: getValue(d, 'PHONE', 'phone') || '',
+            SPECIALIZATION: getValue(d, 'SPECIALIZATION', 'specialization') || 'General Medicine',
+            IS_ACTIVE: getValue(d, 'IS_ACTIVE', 'is_active'),
+            DOCTOR_ID: getValue(d, 'DOCTOR_ID', 'doctor_id'),
+            EXPERIENCE_YEARS: getValue(d, 'EXPERIENCE_YEARS', 'experience_years') || 0,
+            CONSULTATION_FEE: getValue(d, 'CONSULTATION_FEE', 'consultation_fee') || 0,
+            LICENSE_NUMBER: getValue(d, 'LICENSE_NUMBER', 'license_number') || '',
+          }
+        }
+        const fullName = String(fullNameValue || '').trim()
+        const [parsedFirstName = '', ...rest] = fullName.split(' ')
+        return {
+          ...d,
+          FIRST_NAME: parsedFirstName,
+          LAST_NAME: rest.join(' '),
+          PHONE: getValue(d, 'PHONE', 'phone') || '',
+          EMAIL: getValue(d, 'EMAIL', 'email') || '',
+          SPECIALIZATION: getValue(d, 'SPECIALIZATION', 'specialization') || 'General Medicine',
+          IS_ACTIVE: getValue(d, 'IS_ACTIVE', 'is_active'),
+          DOCTOR_ID: getValue(d, 'DOCTOR_ID', 'doctor_id'),
+          EXPERIENCE_YEARS: getValue(d, 'EXPERIENCE_YEARS', 'experience_years') || 0,
+          CONSULTATION_FEE: getValue(d, 'CONSULTATION_FEE', 'consultation_fee') || 0,
+          LICENSE_NUMBER: getValue(d, 'LICENSE_NUMBER', 'license_number') || '',
+        }
+      })
+
+      if (normalized.length === 0) {
+        const apptRes = await appointmentAPI.getAll({ _t: Date.now() })
+        const appts = apptRes.data?.data || []
+        const doctorMap = new Map<string, any>()
+        appts.forEach((a: any, idx: number) => {
+          const doctorNameRaw = String(a.DOCTOR_NAME || a.doctor_name || '').trim().replace(/^Dr\.\s*/i, '')
+          if (!doctorNameRaw) return
+          const key = doctorNameRaw.toLowerCase()
+          const existing = doctorMap.get(key)
+          const [first = '', ...rest] = doctorNameRaw.split(' ')
+          doctorMap.set(key, {
+            DOCTOR_ID: existing?.DOCTOR_ID || a.DOCTOR_ID || a.doctor_id || idx + 1,
+            FIRST_NAME: existing?.FIRST_NAME || first,
+            LAST_NAME: existing?.LAST_NAME || rest.join(' '),
+            EMAIL: existing?.EMAIL || '',
+            PHONE: existing?.PHONE || '',
+            SPECIALIZATION: existing?.SPECIALIZATION || a.SPECIALIZATION || a.specialization || 'General Medicine',
+            IS_ACTIVE: true,
+            EXPERIENCE_YEARS: existing?.EXPERIENCE_YEARS || 0,
+            CONSULTATION_FEE: existing?.CONSULTATION_FEE || 0,
+            LICENSE_NUMBER: existing?.LICENSE_NUMBER || '',
+          })
+        })
+        normalized = Array.from(doctorMap.values())
+      }
+
+      setDoctors(normalized)
     } catch (err) {
       setDoctors([])
+      setLoadError((err as any)?.response?.data?.message || 'Unable to load doctors')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -205,7 +279,15 @@ export default function DoctorsPage() {
             </AnimatePresence>
           </tbody>
         </table>
-        {filtered.length === 0 && (
+        {loading && (
+          <div className="text-center py-12 text-gray-400 text-sm">Loading doctors...</div>
+        )}
+        {!loading && loadError && (
+          <div className="text-center py-10 border-t bg-red-50 border-red-100">
+            <p className="text-sm text-red-600">{loadError}</p>
+          </div>
+        )}
+        {!loading && filtered.length === 0 && (
           <div className="text-center py-12 text-gray-400 text-sm">No doctors found</div>
         )}
       </div>
@@ -250,7 +332,7 @@ export default function DoctorsPage() {
                         onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
                         className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400"
                       >
-                        {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        {field.options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
                     ) : (
                       <input

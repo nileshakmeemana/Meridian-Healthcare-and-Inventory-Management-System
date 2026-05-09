@@ -30,7 +30,7 @@ const navItems: NavItem[] = [
   { label: 'Prescriptions', href: '/dashboard/prescriptions',icon: FileText,        roles: ['admin','doctor','pharmacist','patient'] },
   { label: 'Medicines',     href: '/dashboard/medicines',    icon: Pill,            roles: ['admin','pharmacist','doctor','supplier'] },
   { label: 'Suppliers',     href: '/dashboard/supplier',     icon: Truck,           roles: ['admin','pharmacist','supplier'] },
-  { label: 'Reports',       href: '/dashboard/reports',      icon: BarChart3,       roles: ['admin','pharmacist','supplier'] },
+  { label: 'Reports',       href: '/dashboard/reports',      icon: BarChart3,       roles: ['admin','pharmacist'] },
 ];
 
 export default function Sidebar() {

@@ -80,7 +80,7 @@ export const adminAPI = {
   toggleUserStatus: (id: number) => api.patch(`/admin/users/${id}/toggle`),
   deleteUser:       (id: number) => api.delete(`/admin/users/${id}`),
   // Doctors
-  getDoctors:       () => api.get('/admin/doctors'),
+  getDoctors:       (params?: any) => api.get('/admin/doctors', { params }),
   createDoctor:     (data: any) => api.post('/admin/doctors', data),
   updateDoctor:     (id: number, data: any) => api.put(`/admin/doctors/${id}`, data),
   toggleDoctorStatus: (id: number) => api.patch(`/admin/doctors/${id}/toggle`),
@@ -92,7 +92,7 @@ export const adminAPI = {
   togglePharmacistStatus: (id: number) => api.patch(`/admin/pharmacists/${id}/toggle`),
   deletePharmacist: (id: number) => api.delete(`/admin/pharmacists/${id}`),
   // Patients (admin)
-  getPatients:      () => api.get('/patients'),
+  getPatients:      (params?: any) => api.get('/admin/patients', { params }),
   createPatient:    (data: any) => api.post('/admin/patients', data),
 };
 
@@ -108,7 +108,7 @@ export const patientAPI = {
 
 // ── Doctors ───────────────────────────────────────────────────────────────────
 export const doctorAPI = {
-  getAll:         () => api.get('/doctors'),
+  getAll:         (params?: any) => api.get('/doctors', { params }),
   getById:        (id: number) => api.get(`/doctors/${id}`),
   getSchedule:    () => api.get('/doctors/schedule'),
   updateProfile:  (data: any) => api.put('/doctors/profile', data),
@@ -135,6 +135,8 @@ export const supplierAPI = {
   updateRequest:    (id: number, status: string) => api.put(`/suppliers/requests/${id}`, { status }),
   createOrder:      (data: any) => api.post('/suppliers/supply-orders', data),
   createOrderAdmin: (data: any) => api.post('/suppliers/supply-orders/admin', data),
+  getOrders:        (params?: any) => api.get('/suppliers/supply-orders', { params }),
+  updateOrderStatus: (supplyId: number, status: string) => api.patch(`/suppliers/supply-orders/${supplyId}/status`, { status }),
   getHistory:       () => api.get('/suppliers/supply-history'),
   updateProfile:    (data: any) => api.put('/suppliers/profile', data),
 };

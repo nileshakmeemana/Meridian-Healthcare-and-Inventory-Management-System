@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Users, Search, Calendar, Droplets, Phone, Mail, ChevronRight, Activity, Plus } from 'lucide-react'
-import { patientAPI, adminAPI } from '@/lib/api'
+import { patientAPI, adminAPI, appointmentAPI } from '@/lib/api'
 import { cn, getInitials } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth.store'
 
@@ -16,6 +16,8 @@ const bloodGroupColors: Record<string, string> = {
 export default function PatientsPage() {
   const { user } = useAuthStore()
   const [patients, setPatients] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<any>(null)
   const [genderFilter, setGenderFilter] = useState('All')
@@ -23,11 +25,65 @@ export default function PatientsPage() {
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({ first_name: '', last_name: '', email: '', password: '', date_of_birth: '', gender: 'Male', blood_group: '', phone: '', address: '', emergency_contact: '', emergency_phone: '' })
 
+  const getValue = (row: any, upper: string, lower: string) => row?.[upper] ?? row?.[lower]
+
   useEffect(() => {
-    patientAPI.getAll()
-      .then(r => { if (r.data?.data?.length) setPatients(r.data.data) })
-      .catch(() => setPatients([]))
-  }, [])
+    const loadPatients = async () => {
+      setLoading(true)
+      setLoadError('')
+      try {
+        const r = await adminAPI.getPatients({ _t: Date.now() }).catch(() => patientAPI.getAll({ _t: Date.now() }))
+        const patientRows = r.data?.data || r.data?.rows || (Array.isArray(r.data) ? r.data : [])
+        let normalized = patientRows.map((p: any) => ({
+          ...p,
+          FULL_NAME: getValue(p, 'FULL_NAME', 'full_name') || [getValue(p, 'FIRST_NAME', 'first_name'), getValue(p, 'LAST_NAME', 'last_name')].filter(Boolean).join(' '),
+          AGE: getValue(p, 'AGE', 'age') ?? null,
+          TOTAL_APPOINTMENTS: getValue(p, 'TOTAL_APPOINTMENTS', 'total_appointments') ?? 0,
+          BLOOD_GROUP: getValue(p, 'BLOOD_GROUP', 'blood_group') || 'N/A',
+          EMAIL: getValue(p, 'EMAIL', 'email') || '',
+          PHONE: getValue(p, 'PHONE', 'phone') || '',
+          GENDER: getValue(p, 'GENDER', 'gender') || '',
+          IS_ACTIVE: getValue(p, 'IS_ACTIVE', 'is_active'),
+          ADDRESS: getValue(p, 'ADDRESS', 'address') || '',
+          PATIENT_ID: getValue(p, 'PATIENT_ID', 'patient_id'),
+        }))
+
+        if (normalized.length === 0) {
+          const apptRes = await appointmentAPI.getAll({ _t: Date.now() })
+          const appts = apptRes.data?.data || []
+          const patientMap = new Map<string, any>()
+          appts.forEach((a: any, idx: number) => {
+            const fullName = String(a.PATIENT_NAME || a.patient_name || '').trim()
+            if (!fullName) return
+            const key = fullName.toLowerCase()
+            const existing = patientMap.get(key)
+            patientMap.set(key, {
+              PATIENT_ID: existing?.PATIENT_ID || a.PATIENT_ID || a.patient_id || idx + 1,
+              FULL_NAME: fullName,
+              AGE: existing?.AGE ?? null,
+              TOTAL_APPOINTMENTS: (existing?.TOTAL_APPOINTMENTS || 0) + 1,
+              BLOOD_GROUP: existing?.BLOOD_GROUP || 'N/A',
+              EMAIL: existing?.EMAIL || '',
+              PHONE: existing?.PHONE || '',
+              GENDER: existing?.GENDER || '',
+              IS_ACTIVE: true,
+              ADDRESS: existing?.ADDRESS || '',
+            })
+          })
+          normalized = Array.from(patientMap.values())
+        }
+
+        setPatients(normalized)
+      } catch (err: any) {
+        setPatients([])
+        setLoadError(err?.response?.data?.message || 'Unable to load patients')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadPatients()
+  }, [user?.role])
 
   const openAdd = () => setShowAdd(true)
   const closeAdd = () => {
@@ -40,7 +96,21 @@ export default function PatientsPage() {
     try {
       const res = await adminAPI.createPatient(form)
       if (res.data?.data) {
-        setPatients(prev => [res.data.data, ...prev])
+        const p = res.data.data
+        const normalizedPatient = {
+          ...p,
+          FULL_NAME: getValue(p, 'FULL_NAME', 'full_name') || [getValue(p, 'FIRST_NAME', 'first_name'), getValue(p, 'LAST_NAME', 'last_name')].filter(Boolean).join(' '),
+          AGE: getValue(p, 'AGE', 'age') ?? null,
+          TOTAL_APPOINTMENTS: getValue(p, 'TOTAL_APPOINTMENTS', 'total_appointments') ?? 0,
+          BLOOD_GROUP: getValue(p, 'BLOOD_GROUP', 'blood_group') || 'N/A',
+          EMAIL: getValue(p, 'EMAIL', 'email') || '',
+          PHONE: getValue(p, 'PHONE', 'phone') || '',
+          GENDER: getValue(p, 'GENDER', 'gender') || '',
+          IS_ACTIVE: getValue(p, 'IS_ACTIVE', 'is_active'),
+          ADDRESS: getValue(p, 'ADDRESS', 'address') || '',
+          PATIENT_ID: getValue(p, 'PATIENT_ID', 'patient_id'),
+        }
+        setPatients(prev => [normalizedPatient, ...prev])
         closeAdd()
       }
     } catch (err) {
@@ -120,7 +190,15 @@ export default function PatientsPage() {
         </AnimatePresence>
       </div>
 
-      {filtered.length === 0 && (
+      {loading && (
+        <div className="text-center py-16"><Users className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-gray-500">Loading patients...</p></div>
+      )}
+      {!loading && loadError && (
+        <div className="text-center py-10 border rounded-xl bg-red-50 border-red-100">
+          <p className="text-sm text-red-600">{loadError}</p>
+        </div>
+      )}
+      {!loading && filtered.length === 0 && (
         <div className="text-center py-16"><Users className="w-12 h-12 text-gray-300 mx-auto mb-3" /><p className="text-gray-500">No patients found</p></div>
       )}
 
