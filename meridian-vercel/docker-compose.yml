@@ -1,0 +1,24 @@
+# MongoDB 7 as a single-node replica set — required for multi-document transactions
+# (sp_book_appointment, sp_issue_medicine, sp_create_prescription …).
+#   docker compose up -d
+# then use MONGODB_URI=mongodb://127.0.0.1:27017/meridian?replicaSet=rs0&directConnection=true
+services:
+  mongo:
+    image: mongo:7
+    container_name: meridian-mongo
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - meridian-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first boot, then simply reports healthy
+      test: >
+        mongosh --quiet --eval "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] }).ok }"
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  meridian-data:
